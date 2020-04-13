@@ -119,7 +119,7 @@
       }
       # we need this kernel module to support creating thin pool logical volumes (lv) later.
       modprobe dm_thin_pool
-      _create_lvm_volume_group {{ opensds_volume_group }} 10G
+      _create_lvm_volume_group {{ opensds_volume_group }} 20G
   args:
     executable: /bin/bash
   become: true

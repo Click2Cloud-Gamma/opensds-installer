@@ -31,7 +31,7 @@ cluster_network: "{{ public_network }}"
 monitor_interface: "{{ ansible_default_ipv4.interface }}"
 devices:
   #- '/dev/sda'
-  #- '/dev/sdb'
+  - '/dev/sdb'
 osd_scenario: collocated
 
 ###########

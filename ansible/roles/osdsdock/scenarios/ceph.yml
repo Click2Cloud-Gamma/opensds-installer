@@ -13,8 +13,6 @@
 # limitations under the License.
 
 ---
-- name: ceph pre-flight check
-  include_tasks: roles/osdsdock/scenarios/ceph_preflight_check.yml
 
 - name: check ceph exists
   shell: which ceph
@@ -25,13 +23,6 @@
 #
 # check installed ceph major version and set it to 'installed_ceph_version'.
 #
-- name: check the installed ceph version
-  shell: ceph --version  | egrep ^ceph | awk '{print $3;}' | cut -d "." -f 1,1
-  args:
-    executable: /bin/bash
-  ignore_errors: true
-  register: result
-  when: ceph_existence["rc"] == 0
 
 - name: set_fact installed_ceph_version
   set_fact:
@@ -73,92 +64,11 @@
 #
 # check ceph cluster member status. (if all the osds are up.)
 #
-- name: check ceph cluster member status
-  shell: |
-    declare -a ceph_stat_array=()
-    ceph_stat_array=(`sudo ceph -s | awk '/health:/{print $2;}/osd:/{print $2, $4, $6;}'`)
-    # Check the ceph mon cluster status (again).
-    if [ ${ceph_stat_array[0]} -ne "HEALTH_OK" ]; then
-      exit 1
-    fi
-    # Check if at least 1 osd is defined.
-    if [ ${ceph_stat_array[1]} -lt 1]; then
-      exit 1
-    fi
-    # Check if all the defined osds are up.
-    if [ ${ceph_stat_array[1]} -ne ${ceph_stat_array[2]} ]; then
-      exit 1
-    fi
-    exit 0
-  args:
-    executable: /bin/bash
-  ignore_errors: true
-  register: result
-  when:
-    - ceph_existence["rc"] == 0
-    - ceph_health == "HEALTH_OK"
-
-- name: set_fact ceph_cluster_health_status
-  set_fact:
-    ceph_cluster_health_status: "{{ result['rc'] }}"
-  when:
-    - ceph_existence["rc"] == 0
-    - ceph_health == "HEALTH_OK"
 #
 # check installed ceph version
 #   rc: 0 : required version
 #   rc: 1 : older version, upgrade installation requried.
 #   rc: 2 : newer version
-#   rc: 127 : Unkown release (maybe a typo)
-- name: check if the existing ceph is the required version or not
-  shell: |
-    REQUIRED_CEPH_RELEASE={{ ceph_stable_release }}
-    INSTALLED_CEPH_VERSION={{ installed_ceph_version }}
-    REQUIRED_CEPH_VERSION=
-    case ${REQUIRED_CEPH_RELEASE} in
-    luminous) REQUIRED_CEPH_VERSION="12" ;;
-    mimic) REQUIRED_CEPH_VERSION="13" ;;
-    nautilus) REQUIRED_CEPH_VERSION="14" ;;
-    *)
-      echo "Unknown ceph release requested. ${REQUIRED_CEPH_RELEASE}"
-      exit 127
-      ;;
-    esac
-
-    if [ "${INSTALLED_CEPH_VERSION}" -ne "${REQUIRED_CEPH_VERSION}" ]; then
-      if [ "${INSTALLED_CEPH_VERSION}" -lt "${REQUIRED_CEPH_VERSION}" ]; then
-        # upgrade required
-        exit 1
-      else
-        # downgrade required
-        exit 2
-      fi
-    else
-       # required (major) version
-       exit 0
-    fi
-  args:
-    executable: /bin/bash
-  ignore_errors: true
-  register: result
-  failed_when: result["rc"] == 127
-  when:
-    - ceph_existence["rc"] == 0
-
-- name: set_fact ceph_version_check
-  set_fact:
-    ceph_version_check: "{{ result['rc'] }}"
-  when:
-    - ceph_existence["rc"] == 0
-
-- name: Fail if downgrade of the existing ceph required.
-  fail:
-    msg: "Ceph version downgrade is not supported. Aborting.. "
-  when:
-    - ceph_existence["rc"] == 0
-    - ceph_version_check == "2"
-#
-# install notario
 #
 - name: install notario package with pip when ceph backend enabled
   pip:
@@ -211,24 +121,13 @@
 #     3-a-2 if version NG, abort
 
 # case: 3-a-2
-- name: incorrect - older/newer - version ceph is running properly
-  fail:
-    msg: "older version ceph is configure and running properly. Aborting..."
-  when: ((ceph_existence["rc"] == 0) and (ceph_health == "HEALTH_OK") and (ceph_version_check != "0"))
 
 # case: 2-a
-- name: ceph cluster member health check, especially osds are up or not
-  fail:
-    msg: "ceph is HEALTH_OK, but cluster status is no good. Aborting..."
-  when: ((ceph_existence["rc"] == 0) and (ceph_health == "HEALTH_OK") and (ceph_cluster_health_status is defined and ceph_cluster_health_status != "0"))
 
 # case: 2-b-2, 2-b-3
 #
 # Uninstall older/newer version ceph components before calling ceph-ansible.
 #
-- name: uninstall ceph on upgrade/downgrade installation
-  include_tasks: roles/osdsdock/scenarios/ceph_uninstall.yml
-  when: ((ceph_existence["rc"] == 0) and (ceph_health != "HEALTH_OK") and (ceph_version_check == "1" or ceph_version_check == "2"))
 
 # case: 1-a, 2-b-1
 #
@@ -236,13 +135,10 @@
 #
 - name: install ceph
   include_tasks: roles/osdsdock/scenarios/ceph_install.yml
-  when: ((ceph_existence["rc"] == 0) and (ceph_health != "HEALTH_OK") and (ceph_version_check == "0" or ceph_version_check == "1")) or (ceph_existence["rc"] != 0)
 
 #
 # Wait until ceph -s returns HEALTH_OK and all the OSDs get up.
 #
-- name: wait until ceph stabilizes
-  include_tasks: roles/osdsdock/scenarios/ceph_stabilize.yml
 
 #
 # Create specified ceph pools.
@@ -257,5 +153,3 @@
 # In case of a fresh installation, ceph is a bit eventual until pools become
 # visible. So, wait.
 #
-- name: wait until defined ceph pooll are visible
-  include_tasks: roles/osdsdock/scenarios/ceph_pool_check.yml

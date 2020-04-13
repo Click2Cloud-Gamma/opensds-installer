@@ -18,10 +18,10 @@
   when:
     - "'lvm' in enabled_backends"
 
-- name: include scenarios/ceph.yml
-  include: scenarios/ceph.yml
-  when:
-    - "'ceph' in enabled_backends"
+#- name: include scenarios/ceph.yml
+#  include: scenarios/ceph.yml
+#  when:
+#    - "'ceph' in enabled_backends"
 
 - name: include scenarios/cinder.yml
   include: scenarios/cinder.yml
